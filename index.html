@@ -355,7 +355,7 @@ function axes(yMin,yMax) {
   return {x:{grid:{color:GC,lineWidth:.5},ticks:{color:LC,font:mf(),maxTicksLimit:9},border:{color:'rgba(0,216,255,0.07)'}},y};
 }
 function opts(legend,yMin,yMax) {
-  return {responsive:false,maintainAspectRatio:false,animation:{duration:520,easing:'easeInOutQuart'},
+  return {responsive:true,maintainAspectRatio:false,animation:{duration:520,easing:'easeInOutQuart'},
     plugins:{legend:{display:legend,labels:{color:LC,font:mf(),boxWidth:14,padding:10,usePointStyle:true,pointStyle:'line'}},
     tooltip:{enabled:true,backgroundColor:'#08111e',borderColor:'rgba(0,216,255,0.28)',borderWidth:1,titleColor:'rgba(0,216,255,0.7)',bodyColor:'#ddeeff',titleFont:mf(),bodyFont:{...mf(),size:10},padding:8,cornerRadius:0,displayColors:false}},
     scales:axes(yMin,yMax)};
@@ -366,15 +366,12 @@ let mainChart,c1,c2,c3,c4;
 let simCoData=[], simSvData=[], simLfData=[], simRadData=[], simMarsData=[];
 
 function buildCharts() {
-  // Set safe hardcoded canvas dimensions before Chart.js init.
-  // We can't rely on getBoundingClientRect() because layout may not be complete.
-  // The resize handler will correct dimensions after first paint.
   ['c1','c2','c3','c4'].forEach(id => {
     const el = document.getElementById(id);
+    el.removeAttribute('height');
+    el.removeAttribute('width');
     el.style.width = '100%';
-    el.style.height = '80px';
-    el.width = 300;   // safe fallback — corrected by resize handler
-    el.height = 80;
+    el.style.height = '100%';
   });
 
   const ctx=id=>document.getElementById(id).getContext('2d');
@@ -638,55 +635,32 @@ function selectTab(el,scenario) {
 // Wait for full paint before initializing charts (fixes hosted env canvas sizing)
 // Use ResizeObserver to init charts only once the bottom panel has real dimensions
 // This is more reliable than setTimeout on hosted environments (Netlify, CDN, etc.)
-let chartsBuilt = false;
 
-// Simplified init - no longer needs layout to be ready since canvas dims are hardcoded
-function initWhenReady() {
-  if (chartsBuilt) return;
-  chartsBuilt = true;
+// Single clean init - fires after DOM is ready
+function initCharts() {
+  if (window._chartsReady) return;
+  window._chartsReady = true;
   buildCharts();
   runSim();
+  // Force chart resize after a short delay so they fill their containers
+  setTimeout(() => {
+    [mainChart,c1,c2,c3,c4].forEach(ch => { if(ch) ch.resize(); });
+    runSim();
+  }, 400);
 }
 
-// Try immediately on script execution
-initWhenReady();
-
-// Belt-and-suspenders: also fire on load and after short delay
-window.addEventListener('load', () => { initWhenReady(); });
-setTimeout(() => { initWhenReady(); }, 200);
-setTimeout(() => { initWhenReady(); }, 800);
-
-// After paint: resize mini charts to their real container dimensions and redraw
-function fixMiniChartSizes() {
-  ['c1','c2','c3','c4'].forEach(id => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    const parent = el.parentElement;
-    const box = parent.getBoundingClientRect();
-    const headBox = parent.querySelector('.minihead').getBoundingClientRect();
-    const w = Math.max(Math.round(box.width) - 18, 100);
-    const h = Math.max(Math.round(box.height - headBox.height) - 14, 60);
-    if (w !== el.width || h !== el.height) {
-      el.width = w;
-      el.height = h;
-      el.style.width = w + 'px';
-      el.style.height = h + 'px';
-    }
-  });
-  [c1,c2,c3,c4].forEach(ch => { if (ch) { ch.resize(); ch.update(); } });
+// Fire on DOMContentLoaded or immediately if already loaded
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initCharts);
+} else {
+  initCharts();
 }
+window.addEventListener('load', initCharts);
+setTimeout(initCharts, 500);
+setTimeout(initCharts, 1500);
 
-// Fire size correction after paint
-window.addEventListener('load', () => {
-  setTimeout(fixMiniChartSizes, 100);
-  setTimeout(fixMiniChartSizes, 500);
-  setTimeout(() => { [mainChart,c1,c2,c3,c4].forEach(ch=>{ if(ch) ch.resize(); }); if(mainChart) runSim(); }, 300);
-});
-
-// Redraw on window resize
 window.addEventListener('resize', () => {
-  fixMiniChartSizes();
-  [mainChart,c1,c2,c3,c4].forEach(ch => { if (ch) ch.resize(); });
+  [mainChart,c1,c2,c3,c4].forEach(ch => { if(ch) ch.resize(); });
 });
 </script>
 
